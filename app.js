@@ -25,7 +25,13 @@
     ...(c.Verzeichnispfade||[]).map(p=>p[1]).filter(p=>/^[BM]\.\s*(?:Sc|A|F\.\s*A)\./.test(p||'')).map(p=>programName(p)),
     ...c.Credits_je_Studiengang.filter(p=>p.Studiengang!=='Alle Studiengänge').map(p=>programName(p.Studiengang,p.Abschluss==='Leer'?'':p.Abschluss))
   ])]));
-  const programNames=unique([...programsByCourse.values()].flat());
+  // Only degree programmes listed directly under this faculty belong in the picker.
+  // Credit assignments may also reference programmes from other faculties.
+  const programNames=unique(courses.flatMap(c=>(c.Verzeichnispfade||[])
+    .filter(p=>p[0]==='Fakultät Architektur und Urbanistik')
+    .map(p=>p[1])
+    .filter(p=>/^[BM]\.\s*(?:Sc|A|F\.\s*A)\./.test(p||''))
+    .map(p=>programName(p))));
   function matchesProgram(c,query){
     const term=norm(query).trim();if(!term)return true;
     const exact=programNames.find(p=>norm(p)===term);
