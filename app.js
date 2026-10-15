@@ -3,17 +3,42 @@
   const data = window.BISON_DATA;
   const courses = data.Veranstaltungen;
   const $ = id => document.getElementById(id);
-  const controls = {query:$('query'), professor:$('professor'), teacher:$('teacher'), type:$('type')};
+  const controls = {query:$('query'), program:$('program'), professor:$('professor'), teacher:$('teacher'), type:$('type')};
   const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('de');
   const escape = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const unique = arr => [...new Set(arr.filter(Boolean))];
   const teacherNames = c => unique(c.Lehrpersonen.map(p=>p.Name).filter(n=>n!=='keine öffentliche Person'));
+  function programName(name, degree=''){
+    let clean=String(name||'').replace(/\s*\(PO\s*[^)]*\)/gi,'').replace(/,?\s*PV\s*\d+.*$/i,'').trim();
+    const suffix=clean.match(/\(([BM]\.?\s*(?:Sc|A|F\.?\s*A)|Dipl)\.?\)$/i);
+    if(suffix){degree=suffix[1];clean=clean.slice(0,suffix.index).trim();}
+    const prefix=clean.match(/^([BM]\.\s*(?:Sc|A|F\.\s*A)\.)\s*/i);
+    if(prefix){degree=prefix[1];clean=clean.slice(prefix[0].length);}
+    if(clean==='Produkt-Design')clean='Produktdesign';
+    if(/^Lehramt\b/.test(clean))degree='';
+    degree=degree?degree.replace(/\s+/g,'').replace(/\.?$/,'.'):'';
+    if(degree==='Diplom.')degree='Dipl.';
+    if(clean==='Alle Studiengänge')return '';
+    return [degree,clean].filter(Boolean).join(' ').trim();
+  }
+  const programsByCourse=new Map(courses.map(c=>[c.BISON_ID,unique([
+    ...(c.Verzeichnispfade||[]).map(p=>p[1]).filter(p=>/^[BM]\.\s*(?:Sc|A|F\.\s*A)\./.test(p||'')).map(p=>programName(p)),
+    ...c.Credits_je_Studiengang.filter(p=>p.Studiengang!=='Alle Studiengänge').map(p=>programName(p.Studiengang,p.Abschluss==='Leer'?'':p.Abschluss))
+  ])]));
+  const programNames=unique([...programsByCourse.values()].flat());
+  function matchesProgram(c,query){
+    const term=norm(query).trim();if(!term)return true;
+    const exact=programNames.find(p=>norm(p)===term);
+    const relevant=programNames.filter(p=>exact?p===exact:term.split(/\s+/).every(t=>norm(p).includes(t)));
+    return relevant.length>0&&(programsByCourse.get(c.BISON_ID).some(p=>relevant.includes(p))||c.Credits_je_Studiengang.some(p=>p.Studiengang==='Alle Studiengänge'));
+  }
   const list = (id, entries) => { for(const name of unique(entries).sort((a,b)=>a.localeCompare(b,'de'))){const o=document.createElement('option');o.value=name;o.textContent=name;$(id).append(o);} };
   list('professor',courses.flatMap(c=>c.Professur_Einrichtung));
   list('teacher',courses.flatMap(teacherNames));
   list('type',courses.map(c=>c.Grunddaten.Veranstaltungsart));
+  list('program-options',programNames);
   const searchText = new Map(courses.map(c=>[c.BISON_ID,norm([c.Titel,c.Beschreibung,...c.Professur_Einrichtung,...teacherNames(c)].join(' '))]));
-  function matches(c, state){return (!state.professor||c.Professur_Einrichtung.includes(state.professor))&&(!state.teacher||teacherNames(c).includes(state.teacher))&&(!state.type||c.Grunddaten.Veranstaltungsart===state.type)&&norm(state.query).trim().split(/\s+/).filter(Boolean).every(term=>searchText.get(c.BISON_ID).includes(term));}
+  function matches(c, state){return matchesProgram(c,state.program)&&(!state.professor||c.Professur_Einrichtung.includes(state.professor))&&(!state.teacher||teacherNames(c).includes(state.teacher))&&(!state.type||c.Grunddaten.Veranstaltungsart===state.type)&&norm(state.query).trim().split(/\s+/).filter(Boolean).every(term=>searchText.get(c.BISON_ID).includes(term));}
   function creditSummary(c){const values=unique(c.Credits_je_Studiengang.map(x=>x.Credits));if(values.length)return values.join(' / ')+' ECTS';if(c.Credits_Freitext?.length)return 'Angabe im Detail';return 'Nicht angegeben';}
   function card(c){
     const people = unique(c.Lehrpersonen.map(p=>p.Name==='keine öffentliche Person'?'Weitere Person nicht öffentlich':p.Name));
@@ -25,6 +50,7 @@
   function render(){const filtered=courses.filter(c=>matches(c,state()));$('count').textContent=filtered.length+' von '+courses.length+' Veranstaltungen';$('courses').innerHTML=filtered.map(card).join('');$('empty').hidden=filtered.length>0;return filtered;}
   $('filters').addEventListener('submit',e=>e.preventDefault());
   $('query').addEventListener('input',render);
+  $('program').addEventListener('input',render);
   for(const key of ['professor','teacher','type'])controls[key].addEventListener('change',render);
   function reset(){Object.values(controls).forEach(el=>el.value='');render();}
   $('filters').addEventListener('reset',e=>{e.preventDefault();reset();});
