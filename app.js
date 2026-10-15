@@ -8,6 +8,11 @@
   const escape = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const unique = arr => [...new Set(arr.filter(Boolean))];
   const teacherNames = c => unique(c.Lehrpersonen.map(p=>p.Name).filter(n=>n!=='keine öffentliche Person'));
+  function displayTeacher(name){
+    if(name==='keine öffentliche Person')return 'Weitere Person nicht öffentlich';
+    const [last,first,...titles]=String(name||'').split(',').map(part=>part.trim());
+    return [...titles,first,last].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  }
   function programName(name, degree=''){
     let clean=String(name||'').replace(/\s*\(PO\s*[^)]*\)/gi,'').replace(/,?\s*PV\s*\d+.*$/i,'').trim();
     const suffix=clean.match(/\(([BM]\.?\s*(?:Sc|A|F\.?\s*A)|Dipl)\.?\)$/i);
@@ -39,16 +44,17 @@
   const list = (id, entries) => { for(const name of unique(entries).sort((a,b)=>a.localeCompare(b,'de'))){const o=document.createElement('option');o.value=name;o.textContent=name;$(id).append(o);} };
   list('professor',courses.flatMap(c=>c.Professur_Einrichtung));
   list('teacher',courses.flatMap(teacherNames));
+  for(const option of $('teacher').options){if(option.value)option.textContent=displayTeacher(option.value);}
   list('type',courses.map(c=>c.Grunddaten.Veranstaltungsart));
   list('program',programNames);
   const searchText = new Map(courses.map(c=>[c.BISON_ID,norm([c.Titel,c.Beschreibung,...c.Professur_Einrichtung,...teacherNames(c)].join(' '))]));
   function matches(c, state){return matchesProgram(c,state.program)&&(!state.professor||c.Professur_Einrichtung.includes(state.professor))&&(!state.teacher||teacherNames(c).includes(state.teacher))&&(!state.type||c.Grunddaten.Veranstaltungsart===state.type)&&norm(state.query).trim().split(/\s+/).filter(Boolean).every(term=>searchText.get(c.BISON_ID).includes(term));}
   function creditSummary(c){const values=unique(c.Credits_je_Studiengang.map(x=>x.Credits));if(values.length)return values.join(' / ')+' ECTS';if(c.Credits_Freitext?.length)return 'Angabe im Detail';return 'Nicht angegeben';}
   function card(c){
-    const people = unique(c.Lehrpersonen.map(p=>p.Name==='keine öffentliche Person'?'Weitere Person nicht öffentlich':p.Name));
+    const people = unique(c.Lehrpersonen.map(p=>displayTeacher(p.Name)));
     const creditRows = c.Credits_je_Studiengang.map(x=>'<li>'+escape([x.Abschluss==='Leer'?'':x.Abschluss,x.Studiengang].filter(Boolean).join(' · '))+': '+escape(x.Credits?x.Credits+' ECTS':'nicht angegeben')+'</li>').join('');
     const notes=(c.Credits_Freitext||[]).map(n=>'<p>'+escape(n.Quellfeld)+': '+escape(n.Originaltext)+'</p>').join('');
-    return '<article class="course"><div class="course-top"><span class="kind">'+escape(c.Grunddaten.Veranstaltungsart)+'</span><span>'+escape(c.Grunddaten.Veranstaltungsnummer||'BISON '+c.BISON_ID)+'</span></div><h3>'+escape(c.Titel)+'</h3><dl><dt>Professur</dt><dd>'+escape(c.Professur_Einrichtung.join(' · ')||'Nicht angegeben')+'</dd><dt>Lehrende</dt><dd>'+escape(people.join(' · ')||'Nicht angegeben')+'</dd><dt>Credits</dt><dd>'+escape(creditSummary(c))+'</dd></dl><p class="brief'+(!c.Beschreibung?' missing':'')+'">'+escape(c.Kurzbeschreibung||'Keine Beschreibung in BISON hinterlegt.')+'</p><details><summary>Beschreibung und Details</summary>'+(c.Beschreibung?'<p class="full-description">'+escape(c.Beschreibung)+'</p>':'')+'<p><strong>Credits je Studiengang</strong></p>'+(creditRows?'<ul class="credit-list">'+creditRows+'</ul>':(notes?'':'<p>Nicht angegeben.</p>'))+notes+'</details><div class="course-bottom"><a class="source-link" target="_blank" rel="noopener noreferrer" href="'+escape(c.Quelle)+'">In BISON ansehen<span class="sr-only"> (neuer Tab)</span></a></div></article>';
+    return '<article class="course"><div class="course-top"><span class="kind">'+escape(c.Grunddaten.Veranstaltungsart)+'</span><span>'+escape(c.Grunddaten.Veranstaltungsnummer||'BISON '+c.BISON_ID)+'</span></div><h3>'+escape(c.Titel)+'</h3><dl><dt>Professur</dt><dd>'+escape(c.Professur_Einrichtung.join(' · ')||'Nicht angegeben')+'</dd><dt>Lehrende</dt><dd>'+escape(people.join(', ')||'Nicht angegeben')+'</dd><dt>Credits</dt><dd>'+escape(creditSummary(c))+'</dd></dl><p class="brief'+(!c.Beschreibung?' missing':'')+'">'+escape(c.Kurzbeschreibung||'Keine Beschreibung in BISON hinterlegt.')+'</p><details><summary>Beschreibung und Details</summary>'+(c.Beschreibung?'<p class="full-description">'+escape(c.Beschreibung)+'</p>':'')+'<p><strong>Credits je Studiengang</strong></p>'+(creditRows?'<ul class="credit-list">'+creditRows+'</ul>':(notes?'':'<p>Nicht angegeben.</p>'))+notes+'</details><div class="course-bottom"><a class="source-link" target="_blank" rel="noopener noreferrer" href="'+escape(c.Quelle)+'">In BISON ansehen<span class="sr-only"> (neuer Tab)</span></a></div></article>';
   }
   function state(){return Object.fromEntries(Object.entries(controls).map(([k,el])=>[k,el.value]));}
   function render(){const filtered=courses.filter(c=>matches(c,state()));$('count').textContent=filtered.length+' von '+courses.length+' Veranstaltungen';$('courses').innerHTML=filtered.map(card).join('');$('empty').hidden=filtered.length>0;return filtered;}
