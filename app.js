@@ -11,7 +11,7 @@
   function displayTeacher(name){
     if(name==='keine öffentliche Person')return 'Weitere Person nicht öffentlich';
     const [last,first,...titles]=String(name||'').split(',').map(part=>part.trim());
-    return [...titles,first,last].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    return [...titles,first,last].filter(Boolean).join(' ').replace(/\bMaster\s+of\s+Science\b/gi,'M.Sc.').replace(/\s+/g,' ').trim();
   }
   function programName(name, degree=''){
     let clean=String(name||'').replace(/\s*\(PO\s*[^)]*\)/gi,'').replace(/,?\s*PV\s*\d+.*$/i,'').trim();
